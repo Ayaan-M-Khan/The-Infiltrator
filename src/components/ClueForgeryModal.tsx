@@ -163,7 +163,7 @@ export const ClueForgeryModal: React.FC<ClueForgeryModalProps> = ({
               <div className="space-y-1">
                 <strong className="text-purple-300 font-bold block">Sneaky Execution:</strong>
                 <p className="text-[11px] leading-relaxed text-slate-300">
-                  This change replaces their clue for the round. As the Infiltrator, you will clearly see the forged clue on the board and during voting!
+                  The target player will continue to see their own entered clue during clue submission so they don't get tipped off. Once voting begins, your forged clue takes effect and replaces theirs for everyone!
                 </p>
               </div>
             </div>

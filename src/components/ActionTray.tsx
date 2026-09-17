@@ -240,7 +240,7 @@ export const ActionTray: React.FC<ActionTrayProps> = ({
                         <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
                         <span className="font-bold text-sm text-emerald-300">Your clue is locked in: </span>
                         <span className="font-mono font-black text-sm sm:text-base bg-emerald-900/90 px-2.5 py-0.5 rounded border border-emerald-500 text-yellow-300">
-                          "{activePlayer.clue}"
+                          "{gamePhase === 'clue_submission' && activePlayer.originalClue ? activePlayer.originalClue : activePlayer.clue}"
                         </span>
                         {!allCluesSubmitted && onStartEditClue && (
                           <button

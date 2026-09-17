@@ -104,6 +104,13 @@ function cleanupRoomAfterPlayerRemoval(room: ServerRoom, removedPlayerId: string
       // If in clue submission and all remaining have submitted, advance to voting immediately
       if (room.gamePhase === 'clue_submission' && room.players.every((p) => p.hasSubmittedClue)) {
         room.gamePhase = 'voting';
+        if (room.pendingClueForged && room.pendingClueForged.targetPlayerId && room.pendingClueForged.newClue) {
+          const target = (room.players || []).find((p) => p.id === room.pendingClueForged!.targetPlayerId);
+          if (target) {
+            target.originalClue = target.originalClue || target.clue || '';
+            target.clue = room.pendingClueForged.newClue;
+          }
+        }
       }
     }
   }
@@ -165,6 +172,8 @@ interface ServerRoom {
   voteRound?: number;
   suddenDeath?: boolean;
   settings: ServerGameSettings;
+  pendingClueForged?: { targetPlayerId: string; newClue: string } | null;
+  forgedTargetPlayerId?: string | null;
   createdAt: number;
   lastActive: number;
 }
@@ -459,6 +468,8 @@ app.post('/api/rooms/:roomId/sync', (req, res) => {
 
     // Reset single-round buffs and potion locks on new round
     if (updates.gamePhase === 'clue_submission' && room.gamePhase !== 'clue_submission') {
+      room.pendingClueForged = undefined;
+      room.forgedTargetPlayerId = undefined;
       if (Array.isArray(updates.players)) {
         updates.players = updates.players.map((p: any) => ({
           ...p,
@@ -469,7 +480,22 @@ app.post('/api/rooms/:roomId/sync', (req, res) => {
           oracleRevealedRow: undefined,
           oracleRevealedCol: undefined,
           inkApplied: false,
+          originalClue: undefined,
+          forgedBy: undefined,
         }));
+      }
+    }
+
+    // Apply pending clue forgery when entering voting
+    if (updates.gamePhase === 'voting') {
+      const pending = (updates as any).pendingClueForged || room.pendingClueForged;
+      if (pending && pending.targetPlayerId && pending.newClue) {
+        const targetList = Array.isArray(updates.players) ? updates.players : room.players;
+        const target = (targetList || []).find((p: any) => p.id === pending.targetPlayerId);
+        if (target) {
+          target.originalClue = target.originalClue || target.clue || '';
+          target.clue = String(pending.newClue).trim().slice(0, 30);
+        }
       }
     }
 
@@ -795,6 +821,8 @@ async function startServer() {
 
             // Reset single-round buffs and potion locks on new round
             if (updates.gamePhase === 'clue_submission' && room.gamePhase !== 'clue_submission') {
+              room.pendingClueForged = undefined;
+              room.forgedTargetPlayerId = undefined;
               if (Array.isArray(updates.players)) {
                 updates.players = updates.players.map((p: any) => ({
                   ...p,
@@ -808,6 +836,19 @@ async function startServer() {
                   originalClue: undefined,
                   forgedBy: undefined,
                 }));
+              }
+            }
+
+            // Apply pending clue forgery when entering voting
+            if (updates.gamePhase === 'voting') {
+              const pending = (updates as any).pendingClueForged || room.pendingClueForged;
+              if (pending && pending.targetPlayerId && pending.newClue) {
+                const targetList = Array.isArray(updates.players) ? updates.players : room.players;
+                const target = (targetList || []).find((p: any) => p.id === pending.targetPlayerId);
+                if (target) {
+                  target.originalClue = target.originalClue || target.clue || '';
+                  target.clue = String(pending.newClue).trim().slice(0, 30);
+                }
               }
             }
 
@@ -844,13 +885,21 @@ async function startServer() {
           }
 
           if (potionId === 'ink_of_deceit' && targetPlayerId && newClue) {
+            const sanitizedForged = String(newClue).trim().slice(0, 30);
             const target = room.players.find((p) => p.id === targetPlayerId);
             if (target) {
               target.originalClue = target.originalClue || target.clue || '';
-              target.clue = String(newClue).trim().slice(0, 30);
-              target.hasSubmittedClue = true;
               target.forgedBy = playerId;
+              // If voting has already started, apply immediately, otherwise keep original clue during clue submission
+              if (room.gamePhase === 'voting' || room.gamePhase === 'round_resolution') {
+                target.clue = sanitizedForged;
+              }
             }
+            room.pendingClueForged = {
+              targetPlayerId,
+              newClue: sanitizedForged,
+            };
+            room.forgedTargetPlayerId = targetPlayerId;
           } else if (potionId === 'grid_scrambler') {
             if (category) {
               room.category = category;

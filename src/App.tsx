@@ -946,7 +946,7 @@ function InfiltratorApp() {
 
     sound.click();
     setIsEditingClue(true);
-    setClueInput(activePlayer.clue || '');
+    setClueInput(activePlayer.originalClue || activePlayer.clue || '');
     clearBotTimeouts();
 
     const updated = players.map((p) =>
@@ -1007,7 +1007,7 @@ function InfiltratorApp() {
           return {
             ...p,
             originalClue: formattedClue,
-            clue: pendingClueForgedRef.current?.newClue || p.clue || formattedClue,
+            clue: formattedClue,
             hasSubmittedClue: true,
             isReady: true,
           };
@@ -1063,9 +1063,13 @@ function InfiltratorApp() {
       const updated = prev.map((p) => {
         if (p.hasSubmittedClue && p.clue && p.clue.trim()) return p;
         if (p.id === pendingClueForgedRef.current?.targetPlayerId || p.id === forgedTargetPlayerId) {
+          const fallback = p.isHuman
+            ? (p.role === 'fox' ? 'Wild' : (secretWord || 'Hint'))
+            : generateBotClue(p, activeCat, secretWord, existingClues, settings.foxSeeOneClueEarly);
           return {
             ...p,
-            clue: pendingClueForgedRef.current?.newClue || p.clue,
+            originalClue: p.originalClue || sanitizeClue(fallback),
+            clue: sanitizeClue(fallback),
             hasSubmittedClue: true,
             isReady: true,
           };
@@ -1140,7 +1144,13 @@ function InfiltratorApp() {
           const nextPlayers = prev.map((p) => {
             if (p.id === bot.id) {
               if (isBotForged) {
-                return { ...p, hasSubmittedClue: true, isReady: true };
+                return {
+                  ...p,
+                  originalClue: p.originalClue || sanitizeClue(botClue),
+                  clue: p.clue || sanitizeClue(botClue),
+                  hasSubmittedClue: true,
+                  isReady: true,
+                };
               }
               return { ...p, clue: sanitizeClue(botClue), hasSubmittedClue: true, isReady: true };
             }
@@ -1214,7 +1224,14 @@ function InfiltratorApp() {
     if (targetForgedId && forgedText) {
       finalWithForgedClues = verifiedPlayers.map((p) =>
         p.id === targetForgedId
-          ? { ...p, clue: sanitizeClue(forgedText), hasSubmittedClue: true, isReady: true }
+          ? {
+              ...p,
+              originalClue: p.originalClue || p.clue,
+              clue: sanitizeClue(forgedText),
+              forgedBy: p.forgedBy,
+              hasSubmittedClue: true,
+              isReady: true,
+            }
           : p
       );
       setForgedTargetPlayerId(targetForgedId);
@@ -2170,7 +2187,7 @@ function InfiltratorApp() {
 
     const sanitizedForgedClue = sanitizeClue(newClue);
 
-    // Update players state immediately so Infiltrator can see the forged clue
+    // Update players state without alerting the target player
     const updated = players.map((p) => {
       if (p.id === activePlayer.id) {
         const nextInv = { ...(p.inventory || {}) };
@@ -2182,16 +2199,16 @@ function InfiltratorApp() {
         return {
           ...p,
           inventory: nextInv,
+          hasUsedPotionThisTurn: true,
         };
       }
       if (p.id === targetPlayerId) {
         return {
           ...p,
           originalClue: p.originalClue || p.clue || '',
-          clue: sanitizedForgedClue,
           forgedBy: activePlayer.id,
-          hasSubmittedClue: true,
-          isReady: true,
+          // CRITICAL: Do NOT overwrite p.clue during clue_submission!
+          // The target player will continue to see their own entered clue until voting begins.
         };
       }
       return p;
@@ -2227,7 +2244,7 @@ function InfiltratorApp() {
 
     // Chameleon stealth toast (strictly Chameleon eyes)
     setActivePotionToast({
-      message: `Ink of Deceit active: forged clue "${sanitizedForgedClue}" applied!`,
+      message: `Ink of Deceit active: forged clue "${sanitizedForgedClue}" will take effect when voting starts!`,
       icon: '✒️',
       style: 'purple',
       isChameleonOnly: true,

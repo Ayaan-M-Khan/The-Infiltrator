@@ -505,6 +505,8 @@ export const LeftColumnTable: React.FC<LeftColumnTableProps> = ({
               const displayedClue =
                 isForgedByActiveImpostor && pendingClueForged?.targetPlayerId === p.id && pendingClueForged.newClue
                   ? pendingClueForged.newClue
+                  : gamePhase === 'clue_submission' && p.originalClue
+                  ? p.originalClue
                   : p.clue;
 
               // Voting indicator logic
